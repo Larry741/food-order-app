@@ -1,54 +1,107 @@
-import { useContext } from 'react';
+import { Fragment, useContext, useState } from 'react';
+
+import CartContext from '../../store/cart-context';
 
 import Modal from '../UI/Modal';
 import CartItem from './CartItem';
-import classes from './Cart.module.css';
-import CartContext from '../../store/cart-context';
+import CartCheckout from './CartCheckout';
 
-const Cart = (props) => {
+import classes from './Cart.module.css';
+
+const Cart = props => {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [didSubmit, setDidSubmit] = useState(false);
+  const [ checkout, setCheckout ] = useState(false);
   const cartCtx = useContext(CartContext);
 
-  const totalAmount = `$${cartCtx.totalAmount.toFixed(2)}`;
-  const hasItems = cartCtx.items.length > 0;
+  const hasItem = (cartCtx.items.length > 0);
 
-  const cartItemRemoveHandler = (id) => {
-    cartCtx.removeItem(id);
+  const cartitems = cartCtx.items.map(item => {
+    return (
+      <CartItem
+        key={item.id}
+        data={item}
+        onAdd={cartCtx.addItemToCart}
+        onRemove={cartCtx.removeItemFromCart}
+      />
+    );
+  })
+
+  const Amount = `$${cartCtx.items.reduce((prevValue, curValue, idx, item) => {
+    let val = item[idx].price * item[idx].amount;
+    return prevValue + val;
+  }, 0).toFixed(2)}`;
+
+  const renderFormHandler = () => {
+    setCheckout(true);
+  }
+
+  const submitData = async (UserData) => {
+    setIsSubmitting(true);
+
+    await fetch(
+      "https://meals-database-d8db9-default-rtdb.firebaseio.com/orders.json",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          user: UserData,
+          orderedItems: cartCtx.items,
+        }),
+        headers: { "Content-Type": "application/json" },
+      }
+    );
+    setIsSubmitting(false);
+    setDidSubmit(true);
+    cartCtx.clearCart();
   };
 
-  const cartItemAddHandler = (item) => {
-    cartCtx.addItem(item);
-  };
-
-  const cartItems = (
-    <ul className={classes['cart-items']}>
-      {cartCtx.items.map((item) => (
-        <CartItem
-          key={item.id}
-          name={item.name}
-          amount={item.amount}
-          price={item.price}
-          onRemove={cartItemRemoveHandler.bind(null, item.id)}
-          onAdd={cartItemAddHandler.bind(null, item)}
-        />
-      ))}
-    </ul>
+  const modalContent = (
+    <Fragment>
+      <ul className={classes["cart-items"]}>{cartitems}</ul>
+      <div className={classes.total}>
+        <span>Total Amount</span>
+        <span>{Amount}</span>
+      </div>
+      {checkout && <CartCheckout onSendData={submitData} />}
+      {!checkout && (
+        <div className={classes.actions}>
+          <button
+            onClick={cartCtx.closeCart}
+            className={classes["button--alt"]}
+          >
+            Close
+          </button>
+          {hasItem && (
+            <button className={classes.button} onClick={renderFormHandler}>
+              Order
+            </button>
+          )}
+        </div>
+      )}
+    </Fragment>
   );
 
   return (
-    <Modal onClose={props.onClose}>
-      {cartItems}
-      <div className={classes.total}>
-        <span>Total Amount</span>
-        <span>{totalAmount}</span>
-      </div>
-      <div className={classes.actions}>
-        <button className={classes['button--alt']} onClick={props.onClose}>
-          Close
-        </button>
-        {hasItems && <button className={classes.button}>Order</button>}
-      </div>
+    <Modal>
+      {isSubmitting && !didSubmit ? <p>Submitting Order</p> : <></>}
+      {!isSubmitting && didSubmit ? (
+        <Fragment>
+          <p>Successfully sent order!</p>
+          <div className={classes.actions}>
+            <button
+              onClick={cartCtx.closeCart}
+              className={classes.button}
+            >
+              Close
+            </button>
+          </div>
+        </Fragment>
+      ) : (
+        <></>
+      )}
+      {!isSubmitting && !didSubmit ? modalContent : <></>}
     </Modal>
   );
-};
+}
 
 export default Cart;
